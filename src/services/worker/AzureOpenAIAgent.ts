@@ -28,6 +28,8 @@ import {
 } from './agents/index.js';
 
 const DEFAULT_AZURE_API_VERSION = '2024-10-21';
+const CHARS_PER_TOKEN_ESTIMATE = 4;
+const MAX_AZURE_CONTEXT_TOKENS = 64000;
 
 interface AzureChatCompletionsResponse {
   choices?: Array<{
@@ -285,12 +287,15 @@ export class AzureOpenAIAgent {
     apiVersion: string
   ): Promise<{ content: string; tokensUsed?: number }> {
     const normalizedEndpoint = this.normalizeEndpoint(endpoint);
-    const messages = this.conversationToOpenAIMessages(history);
-    const totalChars = history.reduce((sum, m) => sum + m.content.length, 0);
+    const truncatedHistory = this.truncateHistory(history);
+    const messages = this.conversationToOpenAIMessages(truncatedHistory);
+    const totalChars = truncatedHistory.reduce((sum, m) => sum + m.content.length, 0);
+    const estimatedTokens = this.estimateTokens(truncatedHistory.map(m => m.content).join(''));
 
     logger.debug('SDK', `Querying Azure OpenAI multi-turn (${model})`, {
-      turns: history.length,
+      turns: truncatedHistory.length,
       totalChars,
+      estimatedTokens,
       apiVersion
     });
 
@@ -334,6 +339,47 @@ export class AzureOpenAIAgent {
 
   private normalizeEndpoint(endpoint: string): string {
     return endpoint.replace(/\/+$/, '');
+  }
+
+  /**
+   * Estimate token count from text (conservative estimate)
+   */
+  private estimateTokens(text: string): number {
+    return Math.ceil(text.length / CHARS_PER_TOKEN_ESTIMATE);
+  }
+
+  /**
+   * Truncate conversation history to keep within Azure context window
+   */
+  private truncateHistory(history: ConversationMessage[]): ConversationMessage[] {
+    const totalTokens = history.reduce((sum, m) => sum + this.estimateTokens(m.content), 0);
+    if (totalTokens <= MAX_AZURE_CONTEXT_TOKENS) {
+      return history;
+    }
+
+    const truncated: ConversationMessage[] = [];
+    let tokenCount = 0;
+
+    for (let i = history.length - 1; i >= 0; i--) {
+      const msg = history[i];
+      const msgTokens = this.estimateTokens(msg.content);
+
+      if (tokenCount + msgTokens > MAX_AZURE_CONTEXT_TOKENS) {
+        logger.warn('SDK', 'Azure context window truncated to token limit', {
+          originalMessages: history.length,
+          keptMessages: truncated.length,
+          droppedMessages: i + 1,
+          estimatedTokens: tokenCount,
+          tokenLimit: MAX_AZURE_CONTEXT_TOKENS
+        });
+        break;
+      }
+
+      truncated.unshift(msg);
+      tokenCount += msgTokens;
+    }
+
+    return truncated;
   }
 
 
