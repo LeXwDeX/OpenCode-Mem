@@ -14,6 +14,7 @@ import { DatabaseManager } from '../../DatabaseManager.js';
 import { SDKAgent } from '../../SDKAgent.js';
 import { GeminiAgent, isGeminiSelected, isGeminiAvailable } from '../../GeminiAgent.js';
 import { OpenRouterAgent, isOpenRouterSelected, isOpenRouterAvailable } from '../../OpenRouterAgent.js';
+import { AzureOpenAIAgent, isAzureOpenAISelected, isAzureOpenAIAvailable } from '../../AzureOpenAIAgent.js';
 import type { WorkerService } from '../../../worker-service.js';
 import { BaseRouteHandler } from '../BaseRouteHandler.js';
 import { SessionEventBroadcaster } from '../../events/SessionEventBroadcaster.js';
@@ -34,6 +35,7 @@ export class SessionRoutes extends BaseRouteHandler {
     private sdkAgent: SDKAgent,
     private geminiAgent: GeminiAgent,
     private openRouterAgent: OpenRouterAgent,
+    private azureOpenAIAgent: AzureOpenAIAgent,
     private eventBroadcaster: SessionEventBroadcaster,
     private workerService: WorkerService
   ) {
@@ -51,13 +53,21 @@ export class SessionRoutes extends BaseRouteHandler {
    * Note: Session linking via contentSessionId allows provider switching mid-session.
    * The conversationHistory on ActiveSession maintains context across providers.
    */
-  private getActiveAgent(): SDKAgent | GeminiAgent | OpenRouterAgent {
+  private getActiveAgent(): SDKAgent | GeminiAgent | OpenRouterAgent | AzureOpenAIAgent {
     if (isOpenRouterSelected()) {
       if (isOpenRouterAvailable()) {
         logger.debug('SESSION', 'Using OpenRouter agent');
         return this.openRouterAgent;
       } else {
         throw new Error('OpenRouter provider selected but no API key configured. Set CLAUDE_MEM_OPENROUTER_API_KEY in settings or OPENROUTER_API_KEY environment variable.');
+      }
+    }
+    if (isAzureOpenAISelected()) {
+      if (isAzureOpenAIAvailable()) {
+        logger.debug('SESSION', 'Using Azure OpenAI agent');
+        return this.azureOpenAIAgent;
+      } else {
+        throw new Error('Azure OpenAI provider selected but not fully configured. Set CLAUDE_MEM_AZURE_OPENAI_API_KEY, CLAUDE_MEM_AZURE_OPENAI_ENDPOINT, and CLAUDE_MEM_AZURE_OPENAI_MODEL.');
       }
     }
     if (isGeminiSelected()) {
@@ -74,11 +84,17 @@ export class SessionRoutes extends BaseRouteHandler {
   /**
    * Get the currently selected provider name
    */
-  private getSelectedProvider(): 'claude' | 'gemini' | 'openrouter' {
+  private getSelectedProvider(): 'claude' | 'gemini' | 'openrouter' | 'azure' {
     if (isOpenRouterSelected() && isOpenRouterAvailable()) {
       return 'openrouter';
     }
-    return (isGeminiSelected() && isGeminiAvailable()) ? 'gemini' : 'claude';
+    if (isAzureOpenAISelected() && isAzureOpenAIAvailable()) {
+      return 'azure';
+    }
+    if (isGeminiSelected() && isGeminiAvailable()) {
+      return 'gemini';
+    }
+    return 'claude';
   }
 
   /**
@@ -149,7 +165,7 @@ export class SessionRoutes extends BaseRouteHandler {
    */
   private startGeneratorWithProvider(
     session: ReturnType<typeof this.sessionManager.getSession>,
-    provider: 'claude' | 'gemini' | 'openrouter',
+    provider: 'claude' | 'gemini' | 'openrouter' | 'azure',
     source: string
   ): void {
     if (!session) return;
@@ -164,8 +180,20 @@ export class SessionRoutes extends BaseRouteHandler {
       session.abortController = new AbortController();
     }
 
-    const agent = provider === 'openrouter' ? this.openRouterAgent : (provider === 'gemini' ? this.geminiAgent : this.sdkAgent);
-    const agentName = provider === 'openrouter' ? 'OpenRouter' : (provider === 'gemini' ? 'Gemini' : 'Claude SDK');
+    const agent = provider === 'openrouter'
+      ? this.openRouterAgent
+      : (provider === 'gemini'
+        ? this.geminiAgent
+        : (provider === 'azure'
+          ? this.azureOpenAIAgent
+          : this.sdkAgent));
+    const agentName = provider === 'openrouter'
+      ? 'OpenRouter'
+      : (provider === 'gemini'
+        ? 'Gemini'
+        : (provider === 'azure'
+          ? 'Azure OpenAI'
+          : 'Claude SDK'));
 
     // Use database count for accurate telemetry (in-memory array is always empty due to FK constraint fix)
     const pendingStore = this.sessionManager.getPendingMessageStore();

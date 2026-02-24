@@ -423,6 +423,7 @@ export function ContextSettingsModal({
                   <option value="claude">Claude (uses your Claude account)</option>
                   <option value="gemini">Gemini (uses API key)</option>
                   <option value="openrouter">OpenRouter (multi-model)</option>
+                  <option value="azure">Azure OpenAI (REST API)</option>
                 </select>
               </FormField>
 
@@ -524,6 +525,55 @@ export function ContextSettingsModal({
                       value={formState.CLAUDE_MEM_OPENROUTER_APP_NAME || 'claude-mem'}
                       onChange={(e) => updateSetting('CLAUDE_MEM_OPENROUTER_APP_NAME', e.target.value)}
                       placeholder="claude-mem"
+                    />
+                  </FormField>
+                </>
+              )}
+
+              {formState.CLAUDE_MEM_PROVIDER === 'azure' && (
+                <>
+                  <FormField
+                    label="Azure OpenAI API Key"
+                    tooltip="Azure OpenAI API key (or set AZURE_OPENAI_API_KEY env var)"
+                  >
+                    <input
+                      type="password"
+                      value={formState.CLAUDE_MEM_AZURE_OPENAI_API_KEY || ''}
+                      onChange={(e) => updateSetting('CLAUDE_MEM_AZURE_OPENAI_API_KEY', e.target.value)}
+                      placeholder="Enter Azure OpenAI API key..."
+                    />
+                  </FormField>
+                  <FormField
+                    label="Azure OpenAI Endpoint"
+                    tooltip="Resource endpoint (e.g., https://your-resource.openai.azure.com)"
+                  >
+                    <input
+                      type="text"
+                      value={formState.CLAUDE_MEM_AZURE_OPENAI_ENDPOINT || ''}
+                      onChange={(e) => updateSetting('CLAUDE_MEM_AZURE_OPENAI_ENDPOINT', e.target.value)}
+                      placeholder="https://your-resource.openai.azure.com"
+                    />
+                  </FormField>
+                  <FormField
+                    label="Azure OpenAI Model"
+                    tooltip="Model deployment identifier (v1) or deployment name for older API"
+                  >
+                    <input
+                      type="text"
+                      value={formState.CLAUDE_MEM_AZURE_OPENAI_MODEL || ''}
+                      onChange={(e) => updateSetting('CLAUDE_MEM_AZURE_OPENAI_MODEL', e.target.value)}
+                      placeholder="e.g., gpt-4o-mini"
+                    />
+                  </FormField>
+                  <FormField
+                    label="Azure OpenAI API Version"
+                    tooltip="Data plane inference API version (default 2024-10-21)"
+                  >
+                    <input
+                      type="text"
+                      value={formState.CLAUDE_MEM_AZURE_OPENAI_API_VERSION || '2024-10-21'}
+                      onChange={(e) => updateSetting('CLAUDE_MEM_AZURE_OPENAI_API_VERSION', e.target.value)}
+                      placeholder="2024-10-21"
                     />
                   </FormField>
                 </>

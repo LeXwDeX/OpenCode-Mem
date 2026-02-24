@@ -108,6 +108,7 @@ import { SSEBroadcaster } from './worker/SSEBroadcaster.js';
 import { SDKAgent } from './worker/SDKAgent.js';
 import { GeminiAgent, isGeminiSelected, isGeminiAvailable } from './worker/GeminiAgent.js';
 import { OpenRouterAgent, isOpenRouterSelected, isOpenRouterAvailable } from './worker/OpenRouterAgent.js';
+import { AzureOpenAIAgent, isAzureOpenAISelected, isAzureOpenAIAvailable } from './worker/AzureOpenAIAgent.js';
 import { PaginationHelper } from './worker/PaginationHelper.js';
 import { SettingsManager } from './worker/SettingsManager.js';
 import { SearchManager } from './worker/SearchManager.js';
@@ -168,6 +169,7 @@ export class WorkerService {
   private sdkAgent: SDKAgent;
   private geminiAgent: GeminiAgent;
   private openRouterAgent: OpenRouterAgent;
+  private azureOpenAIAgent: AzureOpenAIAgent;
   private paginationHelper: PaginationHelper;
   private settingsManager: SettingsManager;
   private sessionEventBroadcaster: SessionEventBroadcaster;
@@ -209,6 +211,11 @@ export class WorkerService {
     this.sdkAgent = new SDKAgent(this.dbManager, this.sessionManager);
     this.geminiAgent = new GeminiAgent(this.dbManager, this.sessionManager);
     this.openRouterAgent = new OpenRouterAgent(this.dbManager, this.sessionManager);
+    this.azureOpenAIAgent = new AzureOpenAIAgent(this.dbManager, this.sessionManager);
+
+    this.geminiAgent.setFallbackAgent(this.sdkAgent);
+    this.openRouterAgent.setFallbackAgent(this.sdkAgent);
+    this.azureOpenAIAgent.setFallbackAgent(this.sdkAgent);
 
     this.paginationHelper = new PaginationHelper(this.dbManager);
     this.settingsManager = new SettingsManager(this.dbManager);
@@ -337,7 +344,7 @@ export class WorkerService {
 
     // Standard routes (registered AFTER guard middleware)
     this.server.registerRoutes(new ViewerRoutes(this.sseBroadcaster, this.dbManager, this.sessionManager));
-    this.server.registerRoutes(new SessionRoutes(this.sessionManager, this.dbManager, this.sdkAgent, this.geminiAgent, this.openRouterAgent, this.sessionEventBroadcaster, this));
+    this.server.registerRoutes(new SessionRoutes(this.sessionManager, this.dbManager, this.sdkAgent, this.geminiAgent, this.openRouterAgent, this.azureOpenAIAgent, this.sessionEventBroadcaster, this));
     this.server.registerRoutes(new DataRoutes(this.paginationHelper, this.dbManager, this.sessionManager, this.sseBroadcaster, this, this.startTime));
     this.server.registerRoutes(new SettingsRoutes(this.settingsManager));
     this.server.registerRoutes(new LogsRoutes());
@@ -506,9 +513,12 @@ export class WorkerService {
    * Get the appropriate agent based on provider settings.
    * Same logic as SessionRoutes.getActiveAgent() for consistency.
    */
-  private getActiveAgent(): SDKAgent | GeminiAgent | OpenRouterAgent {
+  private getActiveAgent(): SDKAgent | GeminiAgent | OpenRouterAgent | AzureOpenAIAgent {
     if (isOpenRouterSelected() && isOpenRouterAvailable()) {
       return this.openRouterAgent;
+    }
+    if (isAzureOpenAISelected() && isAzureOpenAIAvailable()) {
+      return this.azureOpenAIAgent;
     }
     if (isGeminiSelected() && isGeminiAvailable()) {
       return this.geminiAgent;
@@ -728,6 +738,18 @@ export class WorkerService {
         return;
       } catch (e) {
         logger.warn('SDK', 'Fallback OpenRouter failed', {
+          sessionId: sessionDbId,
+          error: e instanceof Error ? e.message : String(e)
+        });
+      }
+    }
+
+    if (isAzureOpenAIAvailable()) {
+      try {
+        await this.azureOpenAIAgent.startSession(session, this);
+        return;
+      } catch (e) {
+        logger.warn('SDK', 'Fallback Azure OpenAI failed', {
           sessionId: sessionDbId,
           error: e instanceof Error ? e.message : String(e)
         });

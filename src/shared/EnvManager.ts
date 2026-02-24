@@ -35,6 +35,7 @@ export const MANAGED_CREDENTIAL_KEYS = [
   'ANTHROPIC_API_KEY',
   'GEMINI_API_KEY',
   'OPENROUTER_API_KEY',
+  'AZURE_OPENAI_API_KEY',
 ];
 
 export interface ClaudeMemEnv {
@@ -42,6 +43,7 @@ export interface ClaudeMemEnv {
   ANTHROPIC_API_KEY?: string;
   GEMINI_API_KEY?: string;
   OPENROUTER_API_KEY?: string;
+  AZURE_OPENAI_API_KEY?: string;
 }
 
 /**
@@ -117,6 +119,7 @@ export function loadClaudeMemEnv(): ClaudeMemEnv {
     if (parsed.ANTHROPIC_API_KEY) result.ANTHROPIC_API_KEY = parsed.ANTHROPIC_API_KEY;
     if (parsed.GEMINI_API_KEY) result.GEMINI_API_KEY = parsed.GEMINI_API_KEY;
     if (parsed.OPENROUTER_API_KEY) result.OPENROUTER_API_KEY = parsed.OPENROUTER_API_KEY;
+    if (parsed.AZURE_OPENAI_API_KEY) result.AZURE_OPENAI_API_KEY = parsed.AZURE_OPENAI_API_KEY;
 
     return result;
   } catch (error) {
@@ -163,6 +166,13 @@ export function saveClaudeMemEnv(env: ClaudeMemEnv): void {
         updated.OPENROUTER_API_KEY = env.OPENROUTER_API_KEY;
       } else {
         delete updated.OPENROUTER_API_KEY;
+      }
+    }
+    if (env.AZURE_OPENAI_API_KEY !== undefined) {
+      if (env.AZURE_OPENAI_API_KEY) {
+        updated.AZURE_OPENAI_API_KEY = env.AZURE_OPENAI_API_KEY;
+      } else {
+        delete updated.AZURE_OPENAI_API_KEY;
       }
     }
 
@@ -218,13 +228,8 @@ export function buildIsolatedEnv(includeCredentials: boolean = true): Record<str
     if (credentials.OPENROUTER_API_KEY) {
       isolatedEnv.OPENROUTER_API_KEY = credentials.OPENROUTER_API_KEY;
     }
-
-    // 4. Pass through Claude CLI's OAuth token if available (fallback for CLI subscription billing)
-    // When no ANTHROPIC_API_KEY is configured, the spawned CLI uses subscription billing
-    // which requires either ~/.claude/.credentials.json or CLAUDE_CODE_OAUTH_TOKEN.
-    // The worker inherits this token from the Claude Code session that started it.
-    if (!isolatedEnv.ANTHROPIC_API_KEY && process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-      isolatedEnv.CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    if (credentials.AZURE_OPENAI_API_KEY) {
+      isolatedEnv.AZURE_OPENAI_API_KEY = credentials.AZURE_OPENAI_API_KEY;
     }
   }
 
@@ -265,9 +270,6 @@ export function hasAnthropicApiKey(): boolean {
 export function getAuthMethodDescription(): string {
   if (hasAnthropicApiKey()) {
     return 'API key (from ~/.claude-mem/.env)';
-  }
-  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    return 'Claude Code OAuth token (from parent process)';
   }
   return 'Claude Code CLI (subscription billing)';
 }
