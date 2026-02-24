@@ -29,7 +29,7 @@ import {
 
 const DEFAULT_AZURE_API_VERSION = '2024-10-21';
 const CHARS_PER_TOKEN_ESTIMATE = 4;
-const MAX_AZURE_CONTEXT_TOKENS = 64000;
+const MAX_AZURE_CONTEXT_TOKENS = 128000;
 
 interface AzureChatCompletionsResponse {
   choices?: Array<{
