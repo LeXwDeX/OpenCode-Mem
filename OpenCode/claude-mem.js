@@ -167,21 +167,23 @@ export const ClaudeMemPlugin = async (ctx) => {
   await startWorker(ctx);
 
   return {
+    "tui.prompt.append": async (input, output) => {
+      const cwd = ctx.directory || process.cwd();
+      const projects = getProjectsParam(cwd);
+      const url = `http://127.0.0.1:${WORKER_PORT}/api/context/inject?projects=${encodeURIComponent(projects)}`;
+
+      try {
+        const context = (await fetchText(url)).trim();
+        if (context) {
+          const existingText = output?.text ?? input?.text ?? "";
+          output.text = `${context}\n\n${existingText}`.trim();
+        }
+      } catch {
+        // Fail open: do not block prompt if worker unavailable
+      }
+    },
     event: async ({ event }) => {
       const cwd = ctx.directory || process.cwd();
-
-      if (event.type === "tui.prompt.append") {
-        const projects = getProjectsParam(cwd);
-        const url = `http://127.0.0.1:${WORKER_PORT}/api/context/inject?projects=${encodeURIComponent(projects)}`;
-        try {
-          const context = (await fetchText(url)).trim();
-          if (context) {
-            event.properties.text = `${context}\n\n${event.properties.text}`;
-          }
-        } catch {
-          // Fail open: do not block prompt if worker unavailable
-        }
-      }
 
       if (event.type === "message.updated") {
         const info = event.properties?.info;
